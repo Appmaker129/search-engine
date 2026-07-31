@@ -29,7 +29,8 @@ app.post('/api/index', (req, res) => {
 // - Otherwise fall back to local SQLite search.
 app.get('/api/search', async (req, res) => {
   const q = (req.query.q || '').trim();
-  const limit = parseInt(req.query.limit, 10) || 20;
+  // Increase default limit to 30 to request more results from Tavily
+  const limit = parseInt(req.query.limit, 10) || 30;
   if (!q) return res.json({ results: [] });
 
   const tvlyKey = process.env.TVLY_API_KEY;
@@ -58,25 +59,49 @@ app.get('/api/search', async (req, res) => {
 
       const data = await resp.json();
 
-      // Normalize common shapes into { results: [ { id, title, snippet } ] }
+      // Normalize common shapes into { results: [ { id, title, snippet, url } ] }
       let results = [];
+      const toResult = (item, idx) => ({
+        id: item && (item.id || item._id || item.doc_id) || idx,
+        title: item && (item.title || item.name || item.heading) || '',
+        snippet: item && (item.snippet || item.body || item.summary || item.excerpt) || '',
+        url: item && (item.url || item.link || item.href || item.source_url) || null,
+        score: item && (item.score || item.rank) || null
+      });
+
       if (Array.isArray(data)) {
-        results = data.map((item, idx) => ({ id: item.id || idx, title: item.title || item.name || '', snippet: item.snippet || item.body || item.summary || '' }));
+        results = data.map((item, idx) => toResult(item, idx));
       } else if (Array.isArray(data.results)) {
-        results = data.results.map((item, idx) => ({ id: item.id || idx, title: item.title || item.name || '', snippet: item.snippet || item.body || item.summary || '' }));
+        results = data.results.map((item, idx) => toResult(item, idx));
       } else if (Array.isArray(data.items)) {
-        results = data.items.map((item, idx) => ({ id: item.id || idx, title: item.title || item.name || '', snippet: item.snippet || item.body || item.summary || '' }));
+        results = data.items.map((item, idx) => toResult(item, idx));
       } else if (data.result && Array.isArray(data.result)) {
-        results = data.result.map((item, idx) => ({ id: item.id || idx, title: item.title || item.name || '', snippet: item.snippet || item.body || item.summary || '' }));
+        results = data.result.map((item, idx) => toResult(item, idx));
       } else if (data && typeof data === 'object') {
-        if (data.id || data.title || data.body) {
-          results = [{ id: data.id || 0, title: data.title || data.name || '', snippet: data.snippet || data.body || data.summary || '' }];
-        } else {
-          return res.json({ raw: data });
+        // Single object response: try to extract an array under a common key
+        const possibleArrays = ['hits', 'documents', 'rows', 'matches'];
+        let found = false;
+        for (const k of possibleArrays) {
+          if (Array.isArray(data[k])) {
+            results = data[k].map((item, idx) => toResult(item, idx));
+            found = true;
+            break;
+          }
+        }
+        if (!found) {
+          if (data.id || data.title || data.body) {
+            results = [toResult(data, 0)];
+          } else {
+            // Unknown shape: return raw so frontend can inspect
+            return res.json({ raw: data });
+          }
         }
       } else {
         return res.json({ results: [] });
       }
+
+      // Respect the requested limit client-side as well (slice if upstream returned more)
+      if (results.length > limit) results = results.slice(0, limit);
 
       return res.json({ results });
     } catch (err) {
