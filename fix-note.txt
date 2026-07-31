@@ -1,0 +1,1 @@
+Added engine=18 (nvm) to server/package.json and .nvmrc to force Node 18 for builds. See README note.
