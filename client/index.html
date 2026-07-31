@@ -1,0 +1,22 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Minimal Search Engine</title>
+  <style>
+    body { font-family: system-ui, Arial; margin: 24px; max-width: 900px; }
+    input[type="search"] { width: 100%; padding: 10px; font-size: 16px; }
+    .result { padding: 12px 0; border-bottom: 1px solid #eee; }
+    .title { font-weight: 600; font-size: 18px; }
+    .snippet { color: #333; margin-top: 6px; }
+    mark { background: #ffeb3b; padding: 0 2px; }
+  </style>
+</head>
+<body>
+  <h1>Minimal Search Engine</h1>
+  <input id="q" type="search" placeholder="Type a search query and press Enter" />
+  <div id="results"></div>
+
+  <script src="./app.js"></script>
+</body>
+</html>
