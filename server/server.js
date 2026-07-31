@@ -37,17 +37,17 @@ app.get('/api/search', async (req, res) => {
 
   if (tvlyKey && tvlyUrl) {
     try {
-      // Build URL with query params for GET requests. If your Tavily API expects POST, we can change this to POST.
-      const url = new URL(tvlyUrl);
-      url.searchParams.set('q', q);
-      url.searchParams.set('limit', String(limit));
+      // Tavily expects POST for search. Send a JSON POST with { q, limit }.
+      const payload = { q, limit };
 
-      const resp = await fetch(url.toString(), {
-        method: 'GET',
+      const resp = await fetch(tvlyUrl, {
+        method: 'POST',
         headers: {
           'Authorization': `Bearer ${tvlyKey}`,
-          'Accept': 'application/json'
-        }
+          'Accept': 'application/json',
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(payload),
       });
 
       if (!resp.ok) {
@@ -61,7 +61,6 @@ app.get('/api/search', async (req, res) => {
       // Normalize common shapes into { results: [ { id, title, snippet } ] }
       let results = [];
       if (Array.isArray(data)) {
-        // If the API returned an array of items
         results = data.map((item, idx) => ({ id: item.id || idx, title: item.title || item.name || '', snippet: item.snippet || item.body || item.summary || '' }));
       } else if (Array.isArray(data.results)) {
         results = data.results.map((item, idx) => ({ id: item.id || idx, title: item.title || item.name || '', snippet: item.snippet || item.body || item.summary || '' }));
@@ -70,11 +69,9 @@ app.get('/api/search', async (req, res) => {
       } else if (data.result && Array.isArray(data.result)) {
         results = data.result.map((item, idx) => ({ id: item.id || idx, title: item.title || item.name || '', snippet: item.snippet || item.body || item.summary || '' }));
       } else if (data && typeof data === 'object') {
-        // Try to extract fields if the API returned a single object with fields
         if (data.id || data.title || data.body) {
           results = [{ id: data.id || 0, title: data.title || data.name || '', snippet: data.snippet || data.body || data.summary || '' }];
         } else {
-          // Unknown shape: return the raw payload under `raw` so the frontend can inspect
           return res.json({ raw: data });
         }
       } else {
@@ -103,6 +100,29 @@ app.get('/api/docs/:id', (req, res) => {
   const doc = getDoc(req.params.id);
   if (!doc) return res.status(404).json({ error: 'not found' });
   res.json(doc);
+});
+
+// Optional: lightweight ping to verify Tavily credentials (does not expose the key)
+app.get('/api/tvly-ping', async (req, res) => {
+  const tvlyKey = process.env.TVLY_API_KEY;
+  const tvlyUrl = process.env.TVLY_API_URL;
+  if (!tvlyKey || !tvlyUrl) return res.status(400).json({ error: 'TVLY env vars not set' });
+  try {
+    const resp = await fetch(tvlyUrl, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${tvlyKey}`,
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      },
+      body: JSON.stringify({ q: '', limit: 1 })
+    });
+    const text = await resp.text();
+    return res.json({ status: resp.status, body: text.slice(0, 200) });
+  } catch (err) {
+    console.error('TVLY ping error', err);
+    return res.status(500).json({ error: String(err) });
+  }
 });
 
 app.listen(PORT, () => {
