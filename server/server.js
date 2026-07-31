@@ -37,8 +37,8 @@ app.get('/api/search', async (req, res) => {
 
   if (tvlyKey && tvlyUrl) {
     try {
-      // Tavily expects POST for search. Send a JSON POST with { q, limit }.
-      const payload = { q, limit };
+      // Tavily expects POST with { query, ... } so map our q -> query
+      const payload = { query: q, limit };
 
       const resp = await fetch(tvlyUrl, {
         method: 'POST',
@@ -115,7 +115,7 @@ app.get('/api/tvly-ping', async (req, res) => {
         'Content-Type': 'application/json',
         'Accept': 'application/json'
       },
-      body: JSON.stringify({ q: '', limit: 1 })
+      body: JSON.stringify({ query: '', limit: 1 })
     });
     const text = await resp.text();
     return res.json({ status: resp.status, body: text.slice(0, 200) });
